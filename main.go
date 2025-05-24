@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -63,6 +65,11 @@ func main() {
 	http.HandleFunc("/", logMiddleware(homeHandler))
 	http.HandleFunc("/api/message", logMiddleware(apiHandler))
 	http.HandleFunc("/contact", logMiddleware(contactHandler))
+	http.HandleFunc("/cekContactUs", logMiddleware(cekContactUsHandler))
+
+	// Bisa di test curl
+	// curl -X GET "http://localhost:8080/api/contacts?page=1"
+	http.HandleFunc("/api/contacts", logMiddleware(contactsAPIHandler))
 
 	fs := http.FileServer(http.Dir("static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
@@ -150,4 +157,54 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Info().Str("email", email).Msg("Contact saved successfully")
 	http.Redirect(w, r, "/?sent=true", http.StatusSeeOther)
+}
+
+func cekContactUsHandler(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFiles("templates/cekContactUs.html")
+	if err != nil {
+		log.Error().Err(err).Msg("Error loading cekContactUs template")
+		http.Error(w, "Error loading template", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, nil); err != nil {
+		log.Error().Err(err).Msg("Error rendering cekContactUs template")
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		return
+	}
+}
+
+func contactsAPIHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	pageStr := r.URL.Query().Get("page")
+	page := 1
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	limit := 25
+	offset := (page - 1) * limit
+
+	var contacts []Contact
+	var total int64
+
+	db.Model(&Contact{}).Count(&total)
+
+	result := db.Order("created_at desc").Limit(limit).Offset(offset).Find(&contacts)
+	if result.Error != nil {
+		http.Error(w, "Failed to fetch contacts", http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]interface{}{
+		"data":  contacts,
+		"page":  page,
+		"limit": limit,
+		"total": total,
+		"pages": (total + int64(limit) - 1) / int64(limit),
+	}
+
+	json.NewEncoder(w).Encode(resp)
 }

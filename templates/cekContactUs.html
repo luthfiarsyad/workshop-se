@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Check Contact Us Messages</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="container mx-auto">
+    <h1 class="text-3xl font-bold mb-6">Contact Messages</h1>
+
+    <table class="min-w-full bg-white rounded shadow overflow-hidden">
+      <thead class="bg-gray-800 text-white">
+        <tr>
+          <th class="py-3 px-6 text-left">ID</th>
+          <th class="py-3 px-6 text-left">Name</th>
+          <th class="py-3 px-6 text-left">Email</th>
+          <th class="py-3 px-6 text-left">Message</th>
+          <th class="py-3 px-6 text-left">Created At</th>
+        </tr>
+      </thead>
+      <tbody id="table-body" class="divide-y divide-gray-200">
+        <!-- Data akan diisi oleh JS -->
+      </tbody>
+    </table>
+
+    <div class="flex justify-center mt-6 space-x-4">
+      <button id="prevBtn" class="bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-50" disabled>Prev</button>
+      <span id="pageInfo" class="text-gray-700 self-center"></span>
+      <button id="nextBtn" class="bg-gray-300 text-gray-700 px-4 py-2 rounded disabled:opacity-50" disabled>Next</button>
+    </div>
+  </div>
+
+  <script>
+    const tableBody = document.getElementById('table-body');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const pageInfo = document.getElementById('pageInfo');
+
+    let currentPage = 1;
+    let totalPages = 1;
+
+    async function fetchContacts(page = 1) {
+      const res = await fetch(`/api/contacts?page=${page}`);
+      if (!res.ok) {
+        alert('Failed to fetch contacts');
+        return;
+      }
+      const data = await res.json();
+
+      currentPage = data.page;
+      totalPages = data.pages;
+
+      // Kosongkan dulu tabel
+      tableBody.innerHTML = '';
+
+      data.data.forEach(contact => {
+        const row = document.createElement('tr');
+        row.classList.add('hover:bg-gray-100');
+
+        row.innerHTML = `
+          <td class="py-2 px-4">${contact.ID}</td>
+          <td class="py-2 px-4">${contact.Name}</td>
+          <td class="py-2 px-4">${contact.Email}</td>
+          <td class="py-2 px-4">${contact.Message}</td>
+          <td class="py-2 px-4">${new Date(contact.CreatedAt).toLocaleString()}</td>
+        `;
+
+        tableBody.appendChild(row);
+      });
+
+      pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+    }
+
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        fetchContacts(currentPage - 1);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < totalPages) {
+        fetchContacts(currentPage + 1);
+      }
+    });
+
+    // Fetch pertama kali
+    fetchContacts();
+  </script>
+</body>
+</html>
