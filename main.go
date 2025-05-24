@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"os"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type PageData struct {
@@ -15,38 +18,65 @@ type PageData struct {
 	Message string
 }
 
+type Contact struct {
+	ID        uint `gorm:"primaryKey"`
+	Name      string
+	Email     string
+	Message   string
+	CreatedAt time.Time
+}
+
+var db *gorm.DB
+
 func init() {
 	// Set zerolog default timestamp format
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
 	// Optional: pretty output in development
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+
+	DB, err := initDB()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize database")
+	}
+	db = DB
 }
 
-// func initDB() (*gorm.DB, error) {
-// 	dsn := "host=localhost user=postgres password=root dbname=postgres port=5432 sslmode=disable TimeZone=Asia/Jakarta"
-// 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-// 	if err != nil {
-// 		log.Error().Err(err).Msg("Failed to connect to database")
-// 		return nil, fmt.Errorf("failed to connect to database: %v", err)
-// 	}
+func initDB() (*gorm.DB, error) {
+	dsn := "host=localhost user=postgres password=root dbname=postgres port=5432 sslmode=disable TimeZone=Asia/Jakarta"
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to connect to database")
+		return nil, fmt.Errorf("failed to connect to database: %v", err)
+	}
+	log.Info().Msg("Database connected successfully")
 
-// 	log.Info().Msg("Database connected successfully")
-// 	return db, nil
-// }
+	if err := db.AutoMigrate(&Contact{}); err != nil {
+		log.Error().Err(err).Msg("AutoMigrate failed")
+		return nil, err
+	}
+	
+	log.Info().Msg("AutoMigrate executed successfully")
+	return db, nil
+}
+
 
 func main() {
 	log.Info().Msg("Initializing routes...")
-	
+
 	http.HandleFunc("/", logMiddleware(homeHandler))
 
 	http.HandleFunc("/api/message", logMiddleware(apiHandler))
+	http.HandleFunc("/contact", logMiddleware(contactHandler))
 
 	fs := http.FileServer(http.Dir("static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	log.Info().Msg("Server is running on port 8080")
-	http.ListenAndServe(":8080", nil)
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatal().Err(err).Msg("Failed to start server")
+	}
+
 }
 
 // Middleware logging untuk semua handler
@@ -70,7 +100,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := PageData{
-		Title:   "Welcome to Go Web App",
+		Title:   "Welcome to My Portfolio",
 		Message: "Hello from Go Backend!",
 	}
 
@@ -92,4 +122,40 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 	log.Info().
 		Str("response", response).
 		Msg("API response sent successfully")
+}
+
+func contactHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Form parse error", http.StatusBadRequest)
+		return
+	}
+
+	name := r.FormValue("name")
+	email := r.FormValue("email")
+	message := r.FormValue("message")
+
+	if name == "" || email == "" || message == "" {
+		http.Error(w, "All fields required", http.StatusBadRequest)
+		return
+	}
+
+	contact := Contact{
+		Name:      name,
+		Email:     email,
+		Message:   message,
+		CreatedAt: time.Now(),
+	}
+
+	if err := db.Create(&contact).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to save contact")
+		http.Error(w, "Failed to save contact", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/?success=true", http.StatusSeeOther)
 }
