@@ -1,0 +1,7 @@
+Build Go for AWS EB
+
+GOOS=linux GOARCH=amd64 go build -o main
+echo "web: ./main" > Procfile
+eb init --platform "Go" --region us-east-1
+eb create go-env
+eb deploy
