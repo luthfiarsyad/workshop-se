@@ -29,10 +29,7 @@ type Contact struct {
 var db *gorm.DB
 
 func init() {
-	// Set zerolog default timestamp format
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-
-	// Optional: pretty output in development
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
 	DB, err := initDB()
@@ -55,17 +52,15 @@ func initDB() (*gorm.DB, error) {
 		log.Error().Err(err).Msg("AutoMigrate failed")
 		return nil, err
 	}
-	
 	log.Info().Msg("AutoMigrate executed successfully")
+
 	return db, nil
 }
-
 
 func main() {
 	log.Info().Msg("Initializing routes...")
 
 	http.HandleFunc("/", logMiddleware(homeHandler))
-
 	http.HandleFunc("/api/message", logMiddleware(apiHandler))
 	http.HandleFunc("/contact", logMiddleware(contactHandler))
 
@@ -76,10 +71,8 @@ func main() {
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start server")
 	}
-
 }
 
-// Middleware logging untuk semua handler
 func logMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Info().
@@ -104,8 +97,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		Message: "Hello from Go Backend!",
 	}
 
-	err = tmpl.Execute(w, data)
-	if err != nil {
+	if err := tmpl.Execute(w, data); err != nil {
 		log.Error().Err(err).Msg("Error rendering template")
 		http.Error(w, "Error rendering template", http.StatusInternalServerError)
 		return
@@ -119,9 +111,7 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 	response := `{"message": "This is an API response"}`
 	w.Write([]byte(response))
 
-	log.Info().
-		Str("response", response).
-		Msg("API response sent successfully")
+	log.Info().Str("response", response).Msg("API response sent successfully")
 }
 
 func contactHandler(w http.ResponseWriter, r *http.Request) {
@@ -131,6 +121,7 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
+		log.Error().Err(err).Msg("Failed to parse form")
 		http.Error(w, "Form parse error", http.StatusBadRequest)
 		return
 	}
@@ -140,7 +131,7 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 	message := r.FormValue("message")
 
 	if name == "" || email == "" || message == "" {
-		http.Error(w, "All fields required", http.StatusBadRequest)
+		http.Error(w, "All fields are required", http.StatusBadRequest)
 		return
 	}
 
@@ -157,5 +148,6 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/?success=true", http.StatusSeeOther)
+	log.Info().Str("email", email).Msg("Contact saved successfully")
+	http.Redirect(w, r, "/?sent=true", http.StatusSeeOther)
 }
